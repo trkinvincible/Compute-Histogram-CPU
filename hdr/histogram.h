@@ -27,7 +27,7 @@ class ComputeHistogram : public Task{
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
-        : m_Config(config),NO_OF_CORES(4/*std::thread::hardware_concurrency()*/) {}
+        : m_Config(config),NO_OF_CORES(std::thread::hardware_concurrency()) {}
 
     bool ParseInput() override{
 
@@ -172,9 +172,12 @@ public:
             m_Futures.pop_front();
         }
 
-        for (auto& i : ret){
-            std::cout /*<< i.first << " " */<< i << std::endl;
+        std::ofstream output(m_Config->data().output_file_name);
+        for (int i = 0; i < ret.size(); ++i){
+            output << "(" << i << ", " << ret[i] << ")" << '\n';
         }
+        const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
+        system(tmp.data());
     }
 
 private:
