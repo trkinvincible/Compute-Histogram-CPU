@@ -23,8 +23,12 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    auto start = std::chrono::high_resolution_clock::now();
     std::unique_ptr<Task> task = std::make_unique<ComputeHistogram>(config);
     task->Solve();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
+    std::cout << "total runtime : " << diff.count() << " microseconds." << std::endl;
 
     return 0;
 }
