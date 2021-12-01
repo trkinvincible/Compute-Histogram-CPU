@@ -7,6 +7,7 @@
 #include <thread>
 #include <numeric>
 #include <future>
+#include <string_view>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
@@ -17,7 +18,7 @@
 #include "../hdr/Utility.h"
 
 template <typename T>
-T extract(std::vector<char>& data, std::size_t index){
+T extract(const std::string_view& data, std::size_t index){
     return (T)(data[index]);
 }
 
@@ -25,7 +26,7 @@ class ComputeHistogram : public Task{
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
-        : m_Config(config),NO_OF_CORES(1/*std::thread::hardware_concurrency()*/) {}
+        : m_Config(config),NO_OF_CORES(2/*std::thread::hardware_concurrency()*/) {}
 
     bool ParseInput() override{
 
@@ -86,48 +87,53 @@ public:
         input_file_stream.seekg(0, std::ios_base::end);
         auto end = input_file_stream.tellg();
         auto datasize = (end - start);
+        input_file_stream.seekg(start);
 
-        std::size_t individual_buffer_size = (datasize / NO_OF_CORES);
-        boost::interprocess::offset_t offset = 0;
-        for(uint i = 1; i <= NO_OF_CORES; i++, offset += individual_buffer_size){
+        std::string str(datasize, '\0');
+        if (input_file_stream.read(&str[0], datasize)){
 
-            std::string str(individual_buffer_size, '\0');
-            input_file_stream.seekg(start);
-            if (input_file_stream.read(&str[0], individual_buffer_size)){
-                m_DataSubsets.push_back(std::move(str));
+            try{
+                // Decompress whole string as possibility of corrupted data.
+                boost::iostreams::filtering_ostream decompressingStream;
+                decompressingStream.push(boost::iostreams::gzip_decompressor());
+                decompressingStream.push(boost::iostreams::back_inserter(m_DecompressedData));
+                decompressingStream.write(&str[0], str.size());
+                boost::iostreams::close(decompressingStream);
+            }catch(std::exception e){
+                m_DecompressedData.clear();
+                std::cout << e.what();
+                return false;
             }
-            start = input_file_stream.tellg();
-            if(i == NO_OF_CORES){
-                individual_buffer_size = datasize - (i * individual_buffer_size);
-            }
+        }else{
+            return false;
         }
 
+        // return true only if input data is fully validated
         return true;
     }
 
     bool Operate() override{
 
-        for (auto& data : m_DataSubsets){
+        std::size_t individual_buffer_size = (m_DecompressedData.size() / NO_OF_CORES);
+        boost::interprocess::offset_t offset = 0;
+        const std::size_t datasize = m_DecompressedData.size();
+        for(uint i = 1; i <= NO_OF_CORES; i++, offset += individual_buffer_size){
 
-            auto fu = std::async(std::launch::async, [this, data = std::move(data)]() mutable{
-
-                std::vector<char> decompressedString;
-                boost::iostreams::filtering_ostream decompressingStream;
-                decompressingStream.push(boost::iostreams::gzip_decompressor());
-                decompressingStream.push(boost::iostreams::back_inserter(decompressedString));
-                decompressingStream.write(&data[0], data.size());
-                boost::iostreams::close(decompressingStream);
-
-                const std::size_t total_pixel_count = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
+            if(i == NO_OF_CORES){
+                individual_buffer_size = datasize - ((i-1) * individual_buffer_size);
+            }
+            char* start = (m_DecompressedData.data() + offset);
+            std::string_view tmp(start, individual_buffer_size);
+            const std::size_t total_pixel_count = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
+            auto fu = std::async(std::launch::async, [this, data = std::move(tmp)]() mutable{
 
                 std::vector<std::uint32_t> hist(m_Config->data().bins, 0);
-                for (int idx = 0; idx < decompressedString.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
-                    auto val = extract<uint8_t>(decompressedString, idx);
+                for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
+                    auto val = extract<uint8_t>(data, idx);
                     if ( val < m_Config->data().min || val > m_Config->data().max)
                         continue;
                     hist[val] += 1;
                 }
-
                 return hist;
             });
 
@@ -156,7 +162,7 @@ private:
     std::array<std::size_t, MAX_DIMENSIONS> m_Sizes;
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
 
-    std::vector<std::string> m_DataSubsets;
+    std::string m_DecompressedData;
     std::vector<std::future<std::vector<uint32_t>>> m_Futures;
     const std::unique_ptr<RkConfig>& m_Config;
 };
