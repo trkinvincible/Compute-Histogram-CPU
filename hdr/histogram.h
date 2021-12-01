@@ -8,6 +8,7 @@
 #include <numeric>
 #include <future>
 #include <string_view>
+#include <deque>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
@@ -26,7 +27,7 @@ class ComputeHistogram : public Task{
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
-        : m_Config(config),NO_OF_CORES(2/*std::thread::hardware_concurrency()*/) {}
+        : m_Config(config),NO_OF_CORES(4/*std::thread::hardware_concurrency()*/) {}
 
     bool ParseInput() override{
 
@@ -145,12 +146,35 @@ public:
 
     void WriteOutput() {
 
-        std::for_each(m_Futures.begin(), m_Futures.end(),[](std::future<std::vector<uint32_t>>& fu){
-            std::vector<uint32_t> v = fu.get();
-            for (auto& i : v){
-                std::cout /*<< i.first << " " */<< i << std::endl;
-            }
-        });
+        std::vector<uint32_t> ret;
+        while(!m_Futures.empty()){
+            auto& fu1 = m_Futures.front();
+            ret = fu1.get();
+            m_Futures.pop_front();
+
+            if (m_Futures.empty())
+                break;
+
+            std::promise<std::vector<uint32_t>> merge_promise;
+            std::future<std::vector<uint32_t>> merge_future = merge_promise.get_future();
+            auto mergefu = std::async(std::launch::async, [this, first = std::move(ret), second = std::move(merge_future)]() mutable{
+
+                std::vector<std::uint32_t> ret(256, 0);
+                auto other = second.get();
+                for (int i = 0; i < 256; ++i){
+                    ret[i] = first[i] + other[i];
+                }
+                return ret;
+            });
+            m_Futures.push_back(std::move(mergefu));
+            auto& fu2 = m_Futures.front();
+            merge_promise.set_value(fu2.get());
+            m_Futures.pop_front();
+        }
+
+        for (auto& i : ret){
+            std::cout /*<< i.first << " " */<< i << std::endl;
+        }
     }
 
 private:
@@ -163,6 +187,6 @@ private:
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
 
     std::string m_DecompressedData;
-    std::vector<std::future<std::vector<uint32_t>>> m_Futures;
+    std::deque<std::future<std::vector<uint32_t>>> m_Futures;
     const std::unique_ptr<RkConfig>& m_Config;
 };
