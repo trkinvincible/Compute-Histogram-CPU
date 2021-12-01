@@ -16,7 +16,7 @@ SET( _HEADER_
 
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Improved.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/gzio.h
-
+    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/command.h
 )
 
 ######################
@@ -39,7 +39,7 @@ link_directories(
     )
 
 find_package(ZLIB REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system iostreams)
+find_package(Boost REQUIRED COMPONENTS system iostreams program_options)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
