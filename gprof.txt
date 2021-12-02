@@ -1,0 +1,48 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  Ts/call  Ts/call  name    
+ 51.85      0.14     0.14                             ComputeHistogram::Operate()::{lambda()#1}::operator()()
+ 11.11      0.17     0.03                             std::unique_ptr<config<config_data>, std::default_delete<config<config_data> > >::operator->() const
+  7.41      0.19     0.02                             std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > >::_M_head(std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > > const&)
+  7.41      0.21     0.02                             config<config_data>* const& std::__get_helper<0ul, config<config_data>*, std::default_delete<config<config_data> > >(std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > > const&)
+  3.70      0.22     0.01                             ComputeHistogram::extract(std::basic_string_view<char, std::char_traits<char> > const&, unsigned long)
+  3.70      0.23     0.01                             boost::iostreams::detail::buffer<char, std::allocator<char> >::eptr()
+  3.70      0.24     0.01                             std::unique_ptr<config<config_data>, std::default_delete<config<config_data> > >::get() const
+  3.70      0.25     0.01                             std::__uniq_ptr_impl<config<config_data>, std::default_delete<config<config_data> > >::_M_ptr() const
+  3.70      0.26     0.01                             std::basic_string_view<char, std::char_traits<char> >::data() const
+  3.70      0.27     0.01                             std::tuple_element<0ul, std::tuple<config<config_data>*, std::default_delete<config<config_data> > > >::type const& std::get<0ul, config<config_data>*, std::default_delete<config<config_data> > >(std::tuple<config<config_data>*, std::default_delete<config<config_data> > > const&)
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

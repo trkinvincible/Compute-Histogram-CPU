@@ -3,7 +3,7 @@ project(Ex-2)
 
 set(CMAKE_CXX_STANDARD 17)
 
-option(RUN_UNITTEST "Enable unit-tests" ON)
+option(RUN_UNITTEST "Enable unit-tests" OFF)
 option(RUN_PROFILE "Enable profiling" OFF)
 
 if(RUN_PROFILE)
@@ -57,7 +57,6 @@ find_package(Boost REQUIRED COMPONENTS system iostreams program_options)
 add_executable(${PROJECT_NAME} ${_SOURCES_} ${_HEADER_})
 
 if (RUN_PROFILE)
-    message("profiling...")
     set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
     set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
     set(PROFILE_FLAGS
