@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 class Task
 {
 public:
@@ -23,9 +25,12 @@ public:
         return true;
     }
 
+#ifdef RUN_CATCH
+    virtual std::size_t OutputVal() = 0;
+#endif
+
 protected:
     virtual bool ParseInput() = 0;
     virtual bool Operate() = 0;
     virtual void WriteOutput() = 0;
-
 };

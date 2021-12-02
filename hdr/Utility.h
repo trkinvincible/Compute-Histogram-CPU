@@ -62,6 +62,8 @@ public:
     AlignedContinuousMemory& operator=(AlignedContinuousMemory& other){
         this->m_Data = other.m_Data;
         this->m_Size = other.m_Size;
+
+        return *this;
     }
 
     AlignedContinuousMemory& operator=(AlignedContinuousMemory&& other){
@@ -77,6 +79,7 @@ public:
             m.m_Data = nullptr;
             m.m_Size = 0;
         }
+        return *this;
     }
 
     AlignedContinuousMemory(std::size_t size)

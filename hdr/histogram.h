@@ -167,6 +167,9 @@ public:
 #if 1
             std::cout << c << std::endl;
 #endif
+#ifdef RUN_CATCH
+            m_OutputVal += c;
+#endif
         }
         output.close();
 #if 0
@@ -190,6 +193,12 @@ public:
         return 0.0;
     }
 
+#ifdef RUN_CATCH
+    std::size_t OutputVal(){
+       return m_OutputVal;
+    }
+#endif
+
 private:
     static constexpr int MAX_DIMENSIONS = 16;
 
@@ -198,6 +207,9 @@ private:
     std::array<std::size_t, MAX_DIMENSIONS> m_Sizes;
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
 
+#ifdef RUN_CATCH
+    std::size_t m_OutputVal = 0;
+#endif
     std::vector<std::string> m_DecompressedData;
     std::deque<std::future<bins_type>> m_Futures;
     std::size_t m_DataSize;
