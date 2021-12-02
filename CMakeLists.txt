@@ -3,7 +3,7 @@ project(Ex-2)
 
 set(CMAKE_CXX_STANDARD 17)
 
-option(RUN_UNITTEST "Enable unit-tests" OFF)
+option(RUN_UNITTEST "Enable unit-tests" ON)
 option(RUN_PROFILE "Enable profiling" OFF)
 
 if(RUN_PROFILE)
@@ -30,7 +30,7 @@ SET( _HEADER_
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Utility.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/histogram.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/catch.hpp
-
+    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/catch_testcases.h
 )
 
 ######################
