@@ -17,7 +17,7 @@
 #include "../hdr/Utility.h"
 
 template<typename T>
-T extract(const std::string_view& data, std::size_t index){
+T extract_internal(const std::string_view& data, std::size_t index){
     return static_cast<T>(data[index]);
 }
 
@@ -86,6 +86,7 @@ public:
         }
 
         m_DataSize = RkUtil::parallel_multiply(m_Sizes.begin(), m_Sizes.end());
+
         if (m_DataSize <= 0)
             return false;
 
@@ -114,7 +115,7 @@ public:
 
                     bins_type hist(m_Config->data().bins);
                     for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
-                        auto val = extract<uint8_t>(data, idx);
+                        auto val = extract(data, idx);
                         if ( val < m_Config->data().min || val > m_Config->data().max)
                             continue;
                         hist[val] += 1;
@@ -161,10 +162,27 @@ public:
         std::ofstream output(m_Config->data().output_file_name);
         for (int i = 0; i < ret.size(); ++i){
             output << "(" << i << ", " << ret[i] << ")" << '\n';
+#if 1
             std::cout << ret[i] << std::endl;
+#endif
         }
+#if 0
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
-//        system(tmp.data());
+        system(tmp.data());
+#endif
+    }
+
+    double extract(const std::string_view& data, std::size_t index){
+
+        switch (RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
+
+        case 1:
+            return extract_internal<uint8_t>(data, index);
+            break;
+        case 4:
+            return extract_internal<uint32_t>(data, index);
+            break;
+        }
     }
 
 private:

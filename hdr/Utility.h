@@ -7,8 +7,7 @@
 
 namespace RkUtil {
 
-enum class PAYLOAD_TYPE
-{
+enum class PAYLOAD_TYPE {
     TypeUChar = 0,
     TypeInt
 };
