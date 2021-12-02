@@ -23,6 +23,7 @@ SET( _HEADER_
 #Include Definitions #
 ######################
 add_definitions(-DUSING_BOOST_IPC)
+add_definitions(-DMEMORY_OPTIMIZED)
 
 ######################
 #Include Directories #

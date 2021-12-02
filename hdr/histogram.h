@@ -17,6 +17,9 @@
 #include "../hdr/config.h"
 #include "../hdr/Encoders.h"
 #include "../hdr/Utility.h"
+#ifdef MEMORY_OPTIMIZED
+#include "../hdr/gzio.h"
+#endif
 
 template <typename T>
 T extract(const std::string_view& data, std::size_t index){
@@ -84,6 +87,45 @@ public:
 
         }
 
+        m_DataSize = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
+
+        // read compressed data in chunks
+#ifdef MEMORY_OPTIMIZED
+        FILE* file = fopen(m_Config->data().input_file_name.data(), "rb");
+        std::size_t len = 0;
+        // go until data part
+        for (char* line = NULL; (getline(&line, &len, file)) != -1; ) {
+            if (std::isspace(line[0])){
+                break;
+            }
+        }
+
+        gzFile gzfin;
+        if ((gzfin = GzOpen(file, "rb")) == Z_NULL) {
+          return false;
+        }
+
+        char* data = new char[m_DataSize + 1]();
+        unsigned int didread, sizeChunk{m_DataSize / NO_OF_CORES};
+        std::size_t sizeRed{0};
+        int error;
+        char* copy = data;
+        while (!(error = GzRead(gzfin, copy, sizeChunk, &didread))
+               && didread > 0) {
+            /* Increment the data pointer to the next available chunk. */
+            copy += didread;
+            {
+                std::string tmp(data + sizeRed, didread);
+                m_DecompressedData.push_back(std::move(tmp));
+            }
+            sizeRed += didread;
+            if (m_DataSize >= sizeRed && m_DataSize - sizeRed < sizeChunk){
+                sizeChunk = (uint)(m_DataSize - sizeRed);
+            }
+        }
+        if (GzClose(gzfin));
+        fclose(file);
+#else
         auto start = input_file_stream.tellg();
         input_file_stream.seekg(0, std::ios_base::end);
         auto end = input_file_stream.tellg();
@@ -97,7 +139,8 @@ public:
                 // Decompress whole string as possibility of corrupted data.
                 boost::iostreams::filtering_ostream decompressingStream;
                 decompressingStream.push(boost::iostreams::gzip_decompressor());
-                decompressingStream.push(boost::iostreams::back_inserter(m_DecompressedData));
+                m_DecompressedData.resize(1);
+                decompressingStream.push(boost::iostreams::back_inserter(m_DecompressedData[0]));
                 decompressingStream.write(&str[0], str.size());
                 boost::iostreams::close(decompressingStream);
             }catch(std::exception e){
@@ -108,37 +151,40 @@ public:
         }else{
             return false;
         }
-
+#endif
         // return true only if input data is fully validated
         return true;
     }
 
     bool Operate() override{
 
-        std::size_t individual_buffer_size = (m_DecompressedData.size() / NO_OF_CORES);
-        boost::interprocess::offset_t offset = 0;
-        const std::size_t datasize = m_DecompressedData.size();
-        for(uint i = 1; i <= NO_OF_CORES; i++, offset += individual_buffer_size){
+        for (std::string& slice : m_DecompressedData){
 
-            if(i == NO_OF_CORES){
-                individual_buffer_size = datasize - ((i-1) * individual_buffer_size);
-            }
-            char* start = (m_DecompressedData.data() + offset);
-            std::string_view tmp(start, individual_buffer_size);
-            const std::size_t total_pixel_count = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
-            auto fu = std::async(std::launch::async, [this, data = std::move(tmp)]() mutable{
+            std::size_t individual_buffer_size = (slice.size() / NO_OF_CORES);
+            boost::interprocess::offset_t offset = 0;
+            const std::size_t datasize = slice.size();
+            for(uint i = 1; i <= NO_OF_CORES; i++, offset += individual_buffer_size){
 
-                std::vector<std::uint32_t> hist(m_Config->data().bins, 0);
-                for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
-                    auto val = extract<uint8_t>(data, idx);
-                    if ( val < m_Config->data().min || val > m_Config->data().max)
-                        continue;
-                    hist[val] += 1;
+                if(i == NO_OF_CORES){
+                    individual_buffer_size = datasize - ((i-1) * individual_buffer_size);
                 }
-                return hist;
-            });
+                char* start = (slice.data() + offset);
+                std::string_view tmp(start, individual_buffer_size);
+                const std::size_t total_pixel_count = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
+                auto fu = std::async(std::launch::async, [this, data = std::move(tmp)]() mutable{
 
-            m_Futures.push_back(std::move(fu));
+                    std::vector<std::uint32_t> hist(m_Config->data().bins, 0);
+                    for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
+                        auto val = extract<uint8_t>(data, idx);
+                        if ( val < m_Config->data().min || val > m_Config->data().max)
+                            continue;
+                        hist[val] += 1;
+                    }
+                    return hist;
+                });
+
+                m_Futures.push_back(std::move(fu));
+            }
         }
 
         return true;
@@ -189,7 +235,8 @@ private:
     std::array<std::size_t, MAX_DIMENSIONS> m_Sizes;
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
 
-    std::string m_DecompressedData;
+    std::vector<std::string> m_DecompressedData;
     std::deque<std::future<std::vector<uint32_t>>> m_Futures;
+    std::size_t m_DataSize;
     const std::unique_ptr<RkConfig>& m_Config;
 };
