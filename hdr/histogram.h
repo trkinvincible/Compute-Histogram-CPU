@@ -24,7 +24,7 @@ T extract_internal(const std::string_view& data, std::size_t index){
 class ComputeHistogram : public Task{
 
     // Ideally must be output bin type "-t <type>"
-    using bins_type = RkUtil::AlignedContinuousMemory<>;
+    using bins_type = /*std::vector<uint32_t>;*/RkUtil::AlignedContinuousMemory<>;
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
@@ -161,11 +161,14 @@ public:
 
         std::ofstream output(m_Config->data().output_file_name);
         for (int i = 0; i < ret.size(); ++i){
-            output << "(" << i << ", " << ret[i] << ")" << '\n';
+
+            const auto& c = ret[i];
+            output << "(" << i << ", " << c << ")" << '\n';
 #if 1
-            std::cout << ret[i] << std::endl;
+            std::cout << c << std::endl;
 #endif
         }
+        output.close();
 #if 0
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
         system(tmp.data());
@@ -183,6 +186,8 @@ public:
             return extract_internal<uint32_t>(data, index);
             break;
         }
+
+        return 0.0;
     }
 
 private:

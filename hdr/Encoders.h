@@ -102,7 +102,9 @@ public:
             }
         }
 #endif
+        return true;
     }
+
 };
 
 class RawEncoder : public IEncoder{

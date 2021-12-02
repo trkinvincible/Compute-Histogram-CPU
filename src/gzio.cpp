@@ -3,6 +3,8 @@
 
 #include <memory>
 #include <cstring>
+#include <cstdlib>
+#include <cerrno>
 
 /* default memLevel */
 #if MAX_MEM_LEVEL >= 8
