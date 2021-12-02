@@ -3,7 +3,12 @@
 class Task
 {
 public:
-    bool Solve()
+
+    static const std::size_t NO_OF_CORES;
+
+    virtual ~Task() { }
+
+    bool Compute()
     {
         if (!ParseInput()) {
             return false;
@@ -23,6 +28,4 @@ protected:
     virtual bool Operate() = 0;
     virtual void WriteOutput() = 0;
 
-public:
-    virtual ~Task() { }
 };

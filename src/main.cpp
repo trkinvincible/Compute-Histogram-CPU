@@ -1,5 +1,10 @@
 #include "../hdr/histogram.h"
 #include "../hdr/config.h"
+#if 0
+#include "../hdr/Improved-bkp-multithre.h"
+#endif
+
+std::size_t const Task::NO_OF_CORES = std::thread::hardware_concurrency();
 
 int main(int argc, char *argv[])
 {
@@ -24,11 +29,14 @@ int main(int argc, char *argv[])
     }
 
     auto start = std::chrono::high_resolution_clock::now();
+#if 0
+    temp_function();
+#else
     std::unique_ptr<Task> task = std::make_unique<ComputeHistogram>(config);
-    task->Solve();
+    task->Compute();
+#endif
     auto end = std::chrono::high_resolution_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
     std::cout << "total runtime : " << diff.count() << " microseconds." << std::endl;
-
     return 0;
 }

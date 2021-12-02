@@ -17,13 +17,15 @@ SET( _HEADER_
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Improved.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/gzio.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/command.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Encoders.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Utility.h
+     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/histogram.h
 )
 
 ######################
 #Include Definitions #
 ######################
-add_definitions(-DUSING_BOOST_IPC)
-add_definitions(-DMEMORY_OPTIMIZED)
+#add_definitions(-DMEMORY_OPTIMIZED)
 
 ######################
 #Include Directories #

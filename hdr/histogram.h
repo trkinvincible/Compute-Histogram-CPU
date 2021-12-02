@@ -10,27 +10,25 @@
 #include <string_view>
 #include <deque>
 #include <boost/interprocess/file_mapping.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/gzip.hpp>
 
 #include "../hdr/command.h"
 #include "../hdr/config.h"
 #include "../hdr/Encoders.h"
 #include "../hdr/Utility.h"
-#ifdef MEMORY_OPTIMIZED
-#include "../hdr/gzio.h"
-#endif
 
-template <typename T>
+template<typename T>
 T extract(const std::string_view& data, std::size_t index){
-    return (T)(data[index]);
+    return static_cast<T>(data[index]);
 }
 
 class ComputeHistogram : public Task{
 
+    // Ideally must be output bin type "-t <type>"
+    using bins_type = RkUtil::AlignedContinuousMemory<>;
+
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
-        : m_Config(config),NO_OF_CORES(std::thread::hardware_concurrency()) {}
+        : m_Config(config) {}
 
     bool ParseInput() override{
 
@@ -42,7 +40,7 @@ public:
 
         for (std::string line; std::getline(input_file_stream, line); ) {
 
-            // strictly NRRD file will have a empty line to seperate header and data
+            // strictly NRRD file will have a empty line to seperate header and data. validation must be done on other elemnst as well
             if (line.empty())
                 break;
 
@@ -87,71 +85,15 @@ public:
 
         }
 
-        m_DataSize = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
-
-        // read compressed data in chunks
-#ifdef MEMORY_OPTIMIZED
-        FILE* file = fopen(m_Config->data().input_file_name.data(), "rb");
-        std::size_t len = 0;
-        // go until data part
-        for (char* line = NULL; (getline(&line, &len, file)) != -1; ) {
-            if (std::isspace(line[0])){
-                break;
-            }
-        }
-
-        gzFile gzfin;
-        if ((gzfin = GzOpen(file, "rb")) == Z_NULL) {
-          return false;
-        }
-
-        char* data = new char[m_DataSize + 1]();
-        unsigned int didread, sizeChunk{m_DataSize / NO_OF_CORES};
-        std::size_t sizeRed{0};
-        int error;
-        char* copy = data;
-        while (!(error = GzRead(gzfin, copy, sizeChunk, &didread))
-               && didread > 0) {
-            /* Increment the data pointer to the next available chunk. */
-            copy += didread;
-            {
-                std::string tmp(data + sizeRed, didread);
-                m_DecompressedData.push_back(std::move(tmp));
-            }
-            sizeRed += didread;
-            if (m_DataSize >= sizeRed && m_DataSize - sizeRed < sizeChunk){
-                sizeChunk = (uint)(m_DataSize - sizeRed);
-            }
-        }
-        if (GzClose(gzfin));
-        fclose(file);
-#else
-        auto start = input_file_stream.tellg();
-        input_file_stream.seekg(0, std::ios_base::end);
-        auto end = input_file_stream.tellg();
-        auto datasize = (end - start);
-        input_file_stream.seekg(start);
-
-        std::string str(datasize, '\0');
-        if (input_file_stream.read(&str[0], datasize)){
-
-            try{
-                // Decompress whole string as possibility of corrupted data.
-                boost::iostreams::filtering_ostream decompressingStream;
-                decompressingStream.push(boost::iostreams::gzip_decompressor());
-                m_DecompressedData.resize(1);
-                decompressingStream.push(boost::iostreams::back_inserter(m_DecompressedData[0]));
-                decompressingStream.write(&str[0], str.size());
-                boost::iostreams::close(decompressingStream);
-            }catch(std::exception e){
-                m_DecompressedData.clear();
-                std::cout << e.what();
-                return false;
-            }
-        }else{
+        m_DataSize = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<std::size_t>());
+        if (m_DataSize <= 0)
             return false;
-        }
-#endif
+
+        const auto& r = m_Encoder->Parse(input_file_stream, m_Config->data().input_file_name, m_DataSize);
+        if (r[0].empty())
+            return false;
+        m_DecompressedData.insert(m_DecompressedData.end(), r.begin(), r.end());
+
         // return true only if input data is fully validated
         return true;
     }
@@ -170,10 +112,9 @@ public:
                 }
                 char* start = (slice.data() + offset);
                 std::string_view tmp(start, individual_buffer_size);
-                const std::size_t total_pixel_count = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<int>());
                 auto fu = std::async(std::launch::async, [this, data = std::move(tmp)]() mutable{
 
-                    std::vector<std::uint32_t> hist(m_Config->data().bins, 0);
+                    bins_type hist(m_Config->data().bins);
                     for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
                         auto val = extract<uint8_t>(data, idx);
                         if ( val < m_Config->data().min || val > m_Config->data().max)
@@ -192,7 +133,7 @@ public:
 
     void WriteOutput() {
 
-        std::vector<uint32_t> ret;
+        bins_type ret(0);
         while(!m_Futures.empty()){
             auto& fu1 = m_Futures.front();
             ret = fu1.get();
@@ -201,11 +142,11 @@ public:
             if (m_Futures.empty())
                 break;
 
-            std::promise<std::vector<uint32_t>> merge_promise;
-            std::future<std::vector<uint32_t>> merge_future = merge_promise.get_future();
+            std::promise<bins_type> merge_promise;
+            std::future<bins_type> merge_future = merge_promise.get_future();
             auto mergefu = std::async(std::launch::async, [this, first = std::move(ret), second = std::move(merge_future)]() mutable{
 
-                std::vector<std::uint32_t> ret(256, 0);
+                bins_type ret(m_Config->data().bins);
                 auto other = second.get();
                 for (int i = 0; i < 256; ++i){
                     ret[i] = first[i] + other[i];
@@ -219,8 +160,9 @@ public:
         }
 
         std::ofstream output(m_Config->data().output_file_name);
-        for (int i = 0; i < ret.size(); ++i){
+        for (int i = 0; i < ret.Size(); ++i){
             output << "(" << i << ", " << ret[i] << ")" << '\n';
+            std::cout << ret[i] << std::endl;
         }
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
         system(tmp.data());
@@ -228,7 +170,6 @@ public:
 
 private:
     static constexpr int MAX_DIMENSIONS = 16;
-    const std::size_t NO_OF_CORES;
 
     RkUtil::PAYLOAD_TYPE m_Type;
     std::uint8_t m_Dimension;
@@ -236,7 +177,7 @@ private:
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
 
     std::vector<std::string> m_DecompressedData;
-    std::deque<std::future<std::vector<uint32_t>>> m_Futures;
+    std::deque<std::future<bins_type>> m_Futures;
     std::size_t m_DataSize;
     const std::unique_ptr<RkConfig>& m_Config;
 };
