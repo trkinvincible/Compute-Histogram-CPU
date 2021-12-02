@@ -9,17 +9,17 @@ namespace RkUtil {
 
 enum class PAYLOAD_TYPE {
     TypeUChar = 0,
-    TypeInt
+    TypeShort
 };
 
 const std::size_t PAYLOAD_TYPE_SIZE[] = {
   sizeof(char),
-  sizeof(uint),
+  sizeof(short),
 };
 
 std::map<std::string, PAYLOAD_TYPE> PayLoadType = {
     {"UNSIGNED CHAR", PAYLOAD_TYPE::TypeUChar},
-    {"INT", PAYLOAD_TYPE::TypeInt}
+    {"SHORT", PAYLOAD_TYPE::TypeShort}
 };
 
 std::string str_toupper(std::string s) {

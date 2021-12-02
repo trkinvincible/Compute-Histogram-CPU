@@ -9,6 +9,7 @@
 #include <future>
 #include <string_view>
 #include <deque>
+
 #include <boost/interprocess/file_mapping.hpp>
 
 #include "../hdr/command.h"
@@ -18,7 +19,9 @@
 
 template<typename T>
 T extract_internal(const std::string_view& data, std::size_t index){
-    return static_cast<T>(data[index]);
+    T value;
+    std::memcpy(&value, (data.data() + index), sizeof(T));
+    return value;
 }
 
 class ComputeHistogram : public Task{
@@ -90,7 +93,8 @@ public:
         if (m_DataSize <= 0)
             return false;
 
-        if (!m_Encoder->Parse(input_file_stream, m_Config->data().input_file_name, m_DataSize, m_DecompressedData))
+        if (!m_Encoder->Parse(input_file_stream, m_Config->data().input_file_name,
+                              (m_DataSize * RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]), m_DecompressedData))
             return false;
 
         // return true only if input data is fully validated
@@ -160,17 +164,18 @@ public:
         }
 
         std::ofstream output(m_Config->data().output_file_name);
+        std::size_t to = 0;
         for (int i = 0; i < ret.size(); ++i){
 
             const auto& c = ret[i];
             output << "(" << i << ", " << c << ")" << '\n';
-#if 1
             std::cout << c << std::endl;
-#endif
+            to += c;
 #ifdef RUN_CATCH
             m_OutputVal += c;
 #endif
         }
+        std::cout << "total: " << to << std::endl;
         output.close();
 #if 0
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
@@ -185,8 +190,8 @@ public:
         case 1:
             return extract_internal<uint8_t>(data, index);
             break;
-        case 4:
-            return extract_internal<uint32_t>(data, index);
+        case 2:
+            return extract_internal<int16_t>(data, index);
             break;
         }
 

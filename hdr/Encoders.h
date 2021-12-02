@@ -54,7 +54,7 @@ public:
         }
         gzFile gzfin;
         if ((gzfin = GzOpen(file, "rb")) == Z_NULL) {
-            return {empty_string};
+            return false;
         }
         char* data = new char[data_size + 1]();
         unsigned int didread, sizeChunk{data_size / Task::NO_OF_CORES};
@@ -109,8 +109,20 @@ public:
 
 class RawEncoder : public IEncoder{
 public:
-    bool Parse(std::ifstream& file_stream, const std::string& file_name,
+    bool Parse(std::ifstream& input_file_stream, const std::string& file_name,
                                    std::size_t data_size, std::vector<std::string>& fill) const override{
+        auto start = input_file_stream.tellg();
+        input_file_stream.seekg(0, std::ios_base::end);
+        auto end = input_file_stream.tellg();
+        auto datasize = (end - start);
+        input_file_stream.seekg(start);
+
+        std::string str(datasize, '\0');
+        if (input_file_stream.read(&str[0], datasize)){
+            fill.push_back(str);
+            return true;
+        }
+
         return false;
     }
 };

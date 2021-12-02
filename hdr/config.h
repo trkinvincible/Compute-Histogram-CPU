@@ -63,6 +63,7 @@ private:
     config_data_t config_data;
 };
 
+#pragma pack(push, 2)
 struct config_data {
     /*
      * Usage: unu histo -b <bins> [-min <value>] [-max <value>] [-t <type>] \
@@ -87,6 +88,7 @@ struct config_data {
     std::string input_file_name;
     std::string output_file_name;
 };
+#pragma pack(pop)
 using RkConfig = config<config_data>;
 
 template <typename DATA>
