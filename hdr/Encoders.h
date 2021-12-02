@@ -29,22 +29,21 @@ enum EncoderType : int16_t {
 
 class IEncoder {
 public:
-    virtual std::vector<std::string> Parse(std::ifstream& file_stream, const std::string& file_name,
-                                           std::size_t data_size) const = 0;
+    virtual bool Parse(std::ifstream& file_stream, const std::string& file_name,
+                                           std::size_t data_size, std::vector<std::string>& fill) const = 0;
     friend class ComputeHistogram;
 };
 
 class GzipEncoder : public IEncoder{
 
 public:
-    std::vector<std::string> Parse(std::ifstream& input_file_stream, const std::string& file_name,
-                                   std::size_t data_size) const override{
+    inline bool Parse(std::ifstream& input_file_stream, const std::string& file_name,
+                                   std::size_t data_size, std::vector<std::string>& fill) const override{
 
         static std::string empty_string("");
 
 #ifdef MEMORY_OPTIMIZED
         // read compressed data in chunks with native zlib APIs
-        std::vector<std::string> ret;
         FILE* file = fopen(file_name.data(), "rb");
         std::size_t len = 0;
         // go until data part
@@ -68,7 +67,7 @@ public:
             copy += didread;
             {
                 std::string tmp(data + sizeRed, didread);
-                ret.push_back(std::move(tmp));
+                fill.push_back(std::move(tmp));
             }
             sizeRed += didread;
             if (data_size >= sizeRed && data_size - sizeRed < sizeChunk){
@@ -78,7 +77,7 @@ public:
         GzClose(gzfin);
         fclose(file);
 
-        return ret;
+        return true;
 #else
         auto start = input_file_stream.tellg();
         input_file_stream.seekg(0, std::ios_base::end);
@@ -89,18 +88,17 @@ public:
         std::string str(datasize, '\0');
         if (input_file_stream.read(&str[0], datasize)){
             try{
-                std::string decompressingString;
+                fill.resize(1);
                 // Decompress whole string as possibility of corrupted data.
                 boost::iostreams::filtering_ostream decompressingStream;
                 decompressingStream.push(boost::iostreams::gzip_decompressor());
-                decompressingStream.push(boost::iostreams::back_inserter(decompressingString));
+                decompressingStream.push(boost::iostreams::back_inserter(fill[0]));
                 decompressingStream.write(&str[0], str.size());
                 boost::iostreams::close(decompressingStream);
-
-                return {decompressingString};
+                return true;
             }catch(std::exception e){
                 std::cout << e.what();
-                return {empty_string};
+                return false;
             }
         }
 #endif
@@ -109,11 +107,9 @@ public:
 
 class RawEncoder : public IEncoder{
 public:
-    std::vector<std::string> Parse(std::ifstream& file_stream, const std::string& file_name,
-                                   std::size_t data_size) const override{
-
-        static std::string empty_string("");
-        return {empty_string};
+    bool Parse(std::ifstream& file_stream, const std::string& file_name,
+                                   std::size_t data_size, std::vector<std::string>& fill) const override{
+        return false;
     }
 };
 

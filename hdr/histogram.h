@@ -85,14 +85,12 @@ public:
 
         }
 
-        m_DataSize = std::accumulate(m_Sizes.begin(), m_Sizes.end(), 1, std::multiplies<std::size_t>());
+        m_DataSize = RkUtil::parallel_multiply(m_Sizes.begin(), m_Sizes.end());
         if (m_DataSize <= 0)
             return false;
 
-        const auto& r = m_Encoder->Parse(input_file_stream, m_Config->data().input_file_name, m_DataSize);
-        if (r[0].empty())
+        if (!m_Encoder->Parse(input_file_stream, m_Config->data().input_file_name, m_DataSize, m_DecompressedData))
             return false;
-        m_DecompressedData.insert(m_DecompressedData.end(), r.begin(), r.end());
 
         // return true only if input data is fully validated
         return true;
@@ -146,9 +144,10 @@ public:
             std::future<bins_type> merge_future = merge_promise.get_future();
             auto mergefu = std::async(std::launch::async, [this, first = std::move(ret), second = std::move(merge_future)]() mutable{
 
-                bins_type ret(m_Config->data().bins);
+                const int s = m_Config->data().bins;
+                bins_type ret(s);
                 auto other = second.get();
-                for (int i = 0; i < 256; ++i){
+                for (int i = 0; i < s; ++i){
                     ret[i] = first[i] + other[i];
                 }
                 return ret;
@@ -160,12 +159,12 @@ public:
         }
 
         std::ofstream output(m_Config->data().output_file_name);
-        for (int i = 0; i < ret.Size(); ++i){
+        for (int i = 0; i < ret.size(); ++i){
             output << "(" << i << ", " << ret[i] << ")" << '\n';
             std::cout << ret[i] << std::endl;
         }
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
-        system(tmp.data());
+//        system(tmp.data());
     }
 
 private:

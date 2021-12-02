@@ -74,7 +74,7 @@ public:
         }
     }
 
-    std::size_t Size() const {
+    std::size_t size() const {
         return m_Size;
     }
 
@@ -82,4 +82,19 @@ private:
     std::size_t m_Size = 0;
     T* m_Data;
 };
+
+template <typename RandomIt>
+int parallel_multiply(RandomIt beg, RandomIt end)
+{
+    auto len = end - beg;
+    if (len < 10000)
+        return std::accumulate(beg, end, 1, std::multiplies<std::size_t>());
+
+    RandomIt mid = beg + len/2;
+    auto handle = std::async(std::launch::async,
+                             parallel_multiply<RandomIt>, mid, end);
+    int product = parallel_multiply(beg, mid);
+    return product + handle.get();
+}
+
 }
