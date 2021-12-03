@@ -23,7 +23,6 @@ SET( _SOURCES_
 
 SET( _HEADER_
 
-    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Improved.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/gzio.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/command.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/Encoders.h
@@ -31,6 +30,7 @@ SET( _HEADER_
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/histogram.h
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/catch.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/hdr/catch_testcases.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/hdr/config.h
 )
 
 ######################

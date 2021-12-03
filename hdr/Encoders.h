@@ -30,7 +30,7 @@ enum EncoderType : int16_t {
 class IEncoder {
 public:
     virtual bool Parse(std::ifstream& file_stream, const std::string& file_name,
-                                           std::size_t data_size, std::vector<std::string>& fill) const = 0;
+                       const std::size_t data_size, std::vector<std::string>& fill) const noexcept = 0;
     friend class ComputeHistogram;
 };
 
@@ -38,7 +38,7 @@ class GzipEncoder : public IEncoder{
 
 public:
     inline bool Parse(std::ifstream& input_file_stream, const std::string& file_name,
-                                   std::size_t data_size, std::vector<std::string>& fill) const override{
+                      const std::size_t data_size, std::vector<std::string>& fill) const noexcept override{
 
         static std::string empty_string("");
 
@@ -96,8 +96,8 @@ public:
                 decompressingStream.write(&str[0], str.size());
                 boost::iostreams::close(decompressingStream);
                 return true;
-            }catch(std::exception e){
-                std::cout << e.what();
+            }catch(std::exception& e){
+                std::cout << "NRRD data error!!" << e.what() << std::endl;
                 return false;
             }
         }
@@ -110,17 +110,22 @@ public:
 class RawEncoder : public IEncoder{
 public:
     bool Parse(std::ifstream& input_file_stream, const std::string& file_name,
-                                   std::size_t data_size, std::vector<std::string>& fill) const override{
+               const std::size_t data_size, std::vector<std::string>& fill) const noexcept override{
         auto start = input_file_stream.tellg();
         input_file_stream.seekg(0, std::ios_base::end);
         auto end = input_file_stream.tellg();
         auto datasize = (end - start);
         input_file_stream.seekg(start);
 
-        std::string str(datasize, '\0');
-        if (input_file_stream.read(&str[0], datasize)){
-            fill.push_back(str);
-            return true;
+        try{
+            std::string str(datasize, '\0');
+            if (input_file_stream.read(&str[0], datasize)){
+                fill.push_back(str);
+                return true;
+            }
+        }catch(std::exception& e){
+            std::cout << "NRRD data error!!" << e.what() << std::endl;
+            return false;
         }
 
         return false;
