@@ -2,17 +2,18 @@
 
 #include <iostream>
 
+// Template pattern for all task eg: compute histogram, quantize, convert , save etc..
 class Task
 {
 public:
-
     static const std::size_t NO_OF_CORES;
 
-    virtual ~Task() { }
+    virtual ~Task(){ }
 
-    bool Compute()
-    {
+    bool Compute(){
+
         if (!ParseInput()) {
+            std::cerr << "Input data parse error!!!" << std::endl;
             return false;
         }
 

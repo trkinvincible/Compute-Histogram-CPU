@@ -28,8 +28,12 @@ int main(int argc, char *argv[])
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::unique_ptr<Task> task = std::make_unique<ComputeHistogram>(config);
-    task->Compute();
+    try {
+        std::unique_ptr<Task> task = std::make_unique<ComputeHistogram>(config);
+        task->Compute();
+    }catch (std::exception& ex) {
+        std::cerr << "Task failed!! why? " << ex.what() << std::endl;
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end-start);

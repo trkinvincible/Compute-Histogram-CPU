@@ -3,16 +3,9 @@ Flat profile:
 Each sample counts as 0.01 seconds.
   %   cumulative   self              self     total           
  time   seconds   seconds    calls  Ts/call  Ts/call  name    
- 51.85      0.14     0.14                             ComputeHistogram::Operate()::{lambda()#1}::operator()()
- 11.11      0.17     0.03                             std::unique_ptr<config<config_data>, std::default_delete<config<config_data> > >::operator->() const
-  7.41      0.19     0.02                             std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > >::_M_head(std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > > const&)
-  7.41      0.21     0.02                             config<config_data>* const& std::__get_helper<0ul, config<config_data>*, std::default_delete<config<config_data> > >(std::_Tuple_impl<0ul, config<config_data>*, std::default_delete<config<config_data> > > const&)
-  3.70      0.22     0.01                             ComputeHistogram::extract(std::basic_string_view<char, std::char_traits<char> > const&, unsigned long)
-  3.70      0.23     0.01                             boost::iostreams::detail::buffer<char, std::allocator<char> >::eptr()
-  3.70      0.24     0.01                             std::unique_ptr<config<config_data>, std::default_delete<config<config_data> > >::get() const
-  3.70      0.25     0.01                             std::__uniq_ptr_impl<config<config_data>, std::default_delete<config<config_data> > >::_M_ptr() const
-  3.70      0.26     0.01                             std::basic_string_view<char, std::char_traits<char> >::data() const
-  3.70      0.27     0.01                             std::tuple_element<0ul, std::tuple<config<config_data>*, std::default_delete<config<config_data> > > >::type const& std::get<0ul, config<config_data>*, std::default_delete<config<config_data> > >(std::tuple<config<config_data>*, std::default_delete<config<config_data> > > const&)
+ 71.43      0.05     0.05                             ComputeHistogram::Operate()::{lambda()#1}::operator()()
+ 14.29      0.06     0.01                             ComputeHistogram::DecodeBytes(std::basic_string_view<char, std::char_traits<char> > const&, unsigned long)
+ 14.29      0.07     0.01                             std::basic_string_view<char, std::char_traits<char> >::size() const
 
  %         the percentage of the total running time of the
 time       program used by this function.
