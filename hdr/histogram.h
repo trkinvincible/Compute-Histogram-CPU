@@ -17,10 +17,25 @@
 #include "../hdr/Encoders.h"
 #include "../hdr/Utility.h"
 
+#ifdef  RUN_PROFILER
+#include <gperftools/profiler.h>
+#endif
+
+#ifdef RUN_PROFILER
+#define PROFILE_START ProfilerStart("./gpref_profile_data/cpu.prof" );
+#else
+#define PROFILE_START void dummy_start;
+#endif
+
+#ifdef RUN_PROFILER
+#define PROFILE_STOP ProfilerStop();
+#else
+#define PROFILE_STOP void dummy_stop;
+#endif
+
 class ComputeHistogram : public Task{
 
-    // Ideally must be output bin type "-t <type>"
-    using bins_type = /*std::vector<uint32_t>;*/RkUtil::AlignedContinuousMemory<>;
+    using bins_type = RkUtil::ScopedBin<std::uint32_t>;
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
@@ -148,6 +163,8 @@ public:
                             val = RkUtil::Clamp(min, val, max);
                             hist[val] += 1;
                         }
+
+                        hist.canRelease(false);
                         return hist;
                     });
 
@@ -189,6 +206,7 @@ public:
          * Maybe I will submit another solution in '*.cu' with only the kernel function later.
         */
 
+//PROFILE_START
         bins_type ret;
         while(!m_Futures.empty()){
             auto& fu1 = m_Futures.front();
@@ -201,13 +219,16 @@ public:
             std::promise<bins_type> merge_promise;
             std::future<bins_type> merge_future = merge_promise.get_future();
             auto mergefu = std::async(std::launch::async, [this, first = std::move(ret), second = std::move(merge_future)]() mutable{
-
-                bins_type ret(m_Bins);
                 auto other = second.get();
-                assert(first.size() == other.size());
+                bins_type ret(m_Bins);
+                assert(first->size() == other->size());
                 for (int i = 0; i < m_Bins; ++i){
                     ret[i] = first[i] + other[i];
                 }
+                first.canRelease(true);
+                other.canRelease(true);
+
+                ret.canRelease(false);
                 return ret;
             });
 
@@ -217,7 +238,15 @@ public:
             m_Futures.pop_front();
         }
 
-        m_Output = std::move(ret);
+//PROFILE_STOP
+        // Copy the output for unit test
+        m_Output.reserve(ret->size());
+        for (int i = 0; i < ret->size(); ++i){
+            const auto& c = ret[i];
+            m_Output[i] = c;
+        }
+        ret.canRelease(true);
+
         std::ofstream output(m_Config->data().output_file_name);
         for (int i = 0; i < m_Output.size(); ++i){
             const auto& c = m_Output[i];
@@ -229,6 +258,20 @@ public:
         system(tmp.data());
 #endif
     }
+
+#ifdef RUN_CATCH
+    std::size_t OutputVal(){
+
+        std::size_t ret = 0;
+        for (int i = 0; i < m_Output.size(); ++i){
+            ret += m_Output[i];
+        }
+
+        return ret;
+    }
+#endif
+
+private:
 
     double DecodeBytes(const std::string_view& data, std::size_t index){
 
@@ -245,19 +288,6 @@ public:
         return 0.0;
     }
 
-#ifdef RUN_CATCH
-    std::size_t OutputVal(){
-
-        std::size_t ret = 0;
-        for (int i = 0; i < m_Output.size(); ++i){
-            ret += m_Output[i];
-        }
-
-        return ret;
-    }
-#endif
-
-private:
     static constexpr int MAX_DIMENSIONS = 16;
 
     RkUtil::PAYLOAD_TYPE m_Type;
@@ -265,7 +295,8 @@ private:
     std::uint8_t m_Dimension;
     std::array<std::size_t, MAX_DIMENSIONS> m_Sizes;
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
-    bins_type m_Output = 0;
+    // Use some factory to generate this varaible for type and size based on config
+    std::vector<std::uint32_t> m_Output;
     std::vector<std::string> m_DecompressedData;
     std::deque<std::future<bins_type>> m_Futures;
     std::size_t m_DataSize;

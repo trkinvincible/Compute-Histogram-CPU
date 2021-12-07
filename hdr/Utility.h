@@ -2,7 +2,11 @@
 
 #include <string>
 #include <vector>
+#include <unordered_set>
+#include <functional>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <boost/algorithm/string/trim.hpp>
 
 namespace RkUtil {
@@ -42,6 +46,7 @@ std::vector<std::string> Split(const std::string& input, const char delimiter){
 
     return result;
 }
+
 std::size_t NearestPowerOfTwo(std::size_t v){
 
     v--;
@@ -57,10 +62,9 @@ std::size_t NearestPowerOfTwo(std::size_t v){
     return v;
 }
 
-
 // Lock-free is not wait free. with this container no need memory fence.
 // will yield better performance in GPU/Metal
-template<class T = std::uint32_t>
+template<typename T>
 class AlignedContinuousMemory
 {
     static constexpr std::size_t  CACHELINE_SIZE{64};
@@ -78,13 +82,6 @@ public:
     }
 
     AlignedContinuousMemory& operator=(AlignedContinuousMemory& other){
-        this->m_Data = other.m_Data;
-        this->m_Size = other.m_Size;
-
-        return *this;
-    }
-
-    AlignedContinuousMemory& operator=(AlignedContinuousMemory&& other){
         if (this != &other){
 
             if (this->m_Data){
@@ -92,11 +89,28 @@ public:
                 m_Size = 0;
             }
             AlignedContinuousMemory m(other.m_Size);
-            *this = m;
-            std::uninitialized_move_n(other.m_Data, other.m_Size, this->m_Data);
+            this->m_Data = m.m_Data;
+            this->m_Size = m.m_Size;
+            std::uninitialized_copy_n(other.m_Data, other.m_Size, this->m_Data);
             m.m_Data = nullptr;
             m.m_Size = 0;
         }
+
+        return *this;
+    }
+
+    AlignedContinuousMemory& operator=(AlignedContinuousMemory&& other){
+
+        if (this != &other){
+
+            if (this->m_Data){
+                std::free(m_Data);
+                m_Size = 0;
+            }
+            std::swap(other.m_Data, this->m_Data);
+            std::swap(other.m_Size, this->m_Size);
+        }
+
         return *this;
     }
 
@@ -140,10 +154,120 @@ public:
         return m_Size;
     }
 
+    void clear() {
+
+        if (m_Data){
+            memset(m_Data, 0, sizeof(T) * m_Size);
+        }
+    }
+
 private:
     std::size_t m_Size = 0;
     T* m_Data;
 };
+
+template<typename T, std::size_t N>
+class BinMemPool : public std::enable_shared_from_this<BinMemPool<T, N>>{
+
+public:
+    std::shared_ptr<BinMemPool<T, N>> getBinMemPool() {
+        return this->shared_from_this();
+    }
+
+    ~BinMemPool(){
+
+        assert(m_AcquiredBuffers.empty());
+        for (auto& i : m_AvailableBuffers){
+            delete i;
+        }
+    }
+
+    AlignedContinuousMemory<T>* GetBuffer(){
+
+        std::lock_guard<std::mutex> lk(m_Gurad);
+
+        if (m_AvailableBuffers.empty()){
+            AlignedContinuousMemory<T>* m = new AlignedContinuousMemory<T>(N);
+            m_AcquiredBuffers.insert(m);
+            return m;
+        }else{
+            auto itr = m_AvailableBuffers.begin();
+            auto d = *itr;
+            m_AcquiredBuffers.insert(d);
+            m_AvailableBuffers.erase(itr);
+            d->clear();
+            return d;
+        }
+    }
+
+    void ReleaseBuffer(AlignedContinuousMemory<T>* freeBuf){
+
+        std::lock_guard<std::mutex> lk(m_Gurad);
+
+        auto itr = m_AcquiredBuffers.find(freeBuf);
+        assert(itr != m_AcquiredBuffers.end());
+        m_AvailableBuffers.insert(*itr);
+        m_AcquiredBuffers.erase(itr);
+    }
+
+private:
+    std::mutex m_Gurad;
+    std::unordered_set<AlignedContinuousMemory<T>*> m_AvailableBuffers;
+    std::unordered_set<AlignedContinuousMemory<T>*> m_AcquiredBuffers;
+};
+
+template<typename T>
+struct ScopedBin{
+
+public:
+    ScopedBin(std::size_t size=0)
+        : m_Data(nullptr){
+
+        if (size > 0){
+            m_Data = m_MemPool->getBinMemPool()->GetBuffer();
+        }
+    }
+
+    ~ScopedBin(){
+
+        if (m_Data && m_CanRelease){
+            m_MemPool->getBinMemPool()->ReleaseBuffer(m_Data);
+        }
+    }
+
+    ScopedBin(ScopedBin&& rhs){
+
+        this->m_Data = std::exchange(rhs.m_Data, nullptr);
+        this->m_CanRelease = std::exchange(rhs.m_CanRelease, true);
+    }
+
+    ScopedBin& operator=(ScopedBin&& rhs){
+
+        if (this != &rhs){
+            if (m_Data){
+                m_MemPool->getBinMemPool()->ReleaseBuffer(m_Data);
+                m_Data = nullptr;
+            }
+            this->m_Data = std::exchange(rhs.m_Data, nullptr);
+            this->m_CanRelease = std::exchange(rhs.m_CanRelease, true);
+        }
+
+        return *this;
+    }
+
+    void canRelease(bool b) { m_CanRelease = b; }
+    RkUtil::AlignedContinuousMemory<T>* operator->(){ return m_Data; }
+    T& operator[](std::size_t index){ return (*m_Data)[index]; }
+
+private:
+    bool m_CanRelease = true;
+    RkUtil::AlignedContinuousMemory<T>* m_Data;
+    // bin will have multiple static instances of bins of different sizes. 256 is TODO
+    static std::shared_ptr<BinMemPool<T, 256>> m_MemPool;
+};
+
+template <typename T>
+std::shared_ptr<BinMemPool<T, 256>> ScopedBin<T>::m_MemPool = std::make_shared<BinMemPool<T, 256>>();
 
 template <typename RandomIt>
 int parallel_multiply(RandomIt beg, RandomIt end)

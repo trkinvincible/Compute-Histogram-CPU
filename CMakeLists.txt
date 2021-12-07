@@ -62,7 +62,7 @@ if (RUN_PROFILE)
     set(PROFILE_FLAGS
         -Wl,--no-as-needed
         -lprofiler
-        -pg
+#        -ltcmalloc
         -fno-pie
         -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free)
 endif()
