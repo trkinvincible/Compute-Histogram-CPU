@@ -24,17 +24,18 @@
 #ifdef RUN_PROFILER
 #define PROFILE_START ProfilerStart("./gpref_profile_data/cpu.prof" );
 #else
-#define PROFILE_START void dummy_start;
+#define PROFILE_START
 #endif
 
 #ifdef RUN_PROFILER
 #define PROFILE_STOP ProfilerStop();
 #else
-#define PROFILE_STOP void dummy_stop;
+#define PROFILE_STOP
 #endif
 
 class ComputeHistogram : public Task{
 
+    // Must use some factory method to generate this varaible for type and size based on config
     using bins_type = RkUtil::ScopedBin<std::uint32_t>;
 
 public:
@@ -206,7 +207,7 @@ public:
          * Maybe I will submit another solution in '*.cu' with only the kernel function later.
         */
 
-//PROFILE_START
+PROFILE_START
         bins_type ret;
         while(!m_Futures.empty()){
             auto& fu1 = m_Futures.front();
@@ -222,7 +223,7 @@ public:
                 auto other = second.get();
                 bins_type ret(m_Bins);
                 assert(first->size() == other->size());
-                for (int i = 0; i < m_Bins; ++i){
+                for (int i = 0; i < ret->size(); ++i){
                     ret[i] = first[i] + other[i];
                 }
                 first.canRelease(true);
@@ -237,21 +238,20 @@ public:
             merge_promise.set_value(fu2.get());
             m_Futures.pop_front();
         }
+PROFILE_STOP
 
-//PROFILE_STOP
         // Copy the output for unit test
-        m_Output.reserve(ret->size());
-        for (int i = 0; i < ret->size(); ++i){
+        std::ofstream output(m_Config->data().output_file_name);
+        const auto s = ret->size();
+        m_Output.resize(s);
+        for (int i = 0; i < s; ++i){
             const auto& c = ret[i];
             m_Output[i] = c;
-        }
-        ret.canRelease(true);
-
-        std::ofstream output(m_Config->data().output_file_name);
-        for (int i = 0; i < m_Output.size(); ++i){
-            const auto& c = m_Output[i];
             output << "(" << i << ", " << c << ")" << '\n';
         }
+
+        ret.canRelease(true);
+
         output.close();
 #if 0
         const std::string tmp = std::string("subl ") + std::string(m_Config->data().output_file_name);
@@ -262,12 +262,7 @@ public:
 #ifdef RUN_CATCH
     std::size_t OutputVal(){
 
-        std::size_t ret = 0;
-        for (int i = 0; i < m_Output.size(); ++i){
-            ret += m_Output[i];
-        }
-
-        return ret;
+        return std::accumulate(m_Output.begin(), m_Output.end(), 0);
     }
 #endif
 
@@ -295,7 +290,6 @@ private:
     std::uint8_t m_Dimension;
     std::array<std::size_t, MAX_DIMENSIONS> m_Sizes;
     std::shared_ptr<RkEncoders::IEncoder> m_Encoder;
-    // Use some factory to generate this varaible for type and size based on config
     std::vector<std::uint32_t> m_Output;
     std::vector<std::string> m_DecompressedData;
     std::deque<std::future<bins_type>> m_Futures;

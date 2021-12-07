@@ -8,9 +8,9 @@ std::unique_ptr<Task> Test_Function(std::string filename)
 {
     std::unique_ptr<RkConfig> config = std::make_unique<RkConfig>([filename](config_data &d, boost::program_options::options_description &desc){
         desc.add_options()
-                ("-b", boost::program_options::value<std::uint16_t>(&d.bins)->default_value(280), "# of bins in histogram (int)")
+                ("-b", boost::program_options::value<std::uint16_t>(&d.bins)->default_value(300), "# of bins in histogram (int)")
                 ("-min", boost::program_options::value<double>(&d.min)->default_value(0.0), "Value at low end of histogram. Defaults to lowest value found in input nrrd. (double)")
-                ("-max", boost::program_options::value<double>(&d.max)->default_value(280.0), "Value at high end of histogram. Defaults to highest value found in input nrrd. (double)")
+                ("-max", boost::program_options::value<double>(&d.max)->default_value(300.0), "Value at high end of histogram. Defaults to highest value found in input nrrd. (double)")
                 ("-t", boost::program_options::value<uint8_t>(&d.type)->default_value(1), "type to use for bins in output histogram; default: \"uint\"")
                 ("-i", boost::program_options::value<std::string>(&d.input_file_name)->default_value(filename.data()), "input nrrd")
                 ("-o", boost::program_options::value<std::string>(&d.output_file_name)->default_value("../solution.txt"), "solution file");
@@ -18,7 +18,7 @@ std::unique_ptr<Task> Test_Function(std::string filename)
 
     try {
         char* a[] = {"Ex2", "-i", filename.data()};
-        config->parse(5, a);
+        config->parse(3, a);
     }
     catch(std::exception const& e) {
         std::cout << e.what();
