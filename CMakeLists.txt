@@ -3,22 +3,34 @@ project(Ex-2)
 
 set(CMAKE_CXX_STANDARD 17)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 option(RUN_UNITTEST "Enable unit-tests" OFF)
-option(RUN_PROFILE "Enable profiling" OFF)
+option(RUN_PROFILE "Enable profiling" ON)
 
 if(RUN_PROFILE)
     message("profiling enabled")
     add_definitions(-DRUN_PROFILER)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 if(RUN_UNITTEST)
     message("unit test enabled")
     add_definitions(-DRUN_CATCH)
 endif()
 
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -Wall -Wextra")
+# somehow santizer fails for valgrind
+if(NOT RUN_PROFILE)
+set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fsanitize=address")
+endif()
+
 SET( _SOURCES_
 
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/gzio.cpp
+    #${CMAKE_CURRENT_SOURCE_DIR}/src/gzio.cpp
 )
 
 SET( _HEADER_
@@ -57,13 +69,11 @@ find_package(Boost REQUIRED COMPONENTS system iostreams program_options)
 add_executable(${PROJECT_NAME} ${_SOURCES_} ${_HEADER_})
 
 if (RUN_PROFILE)
-    set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-    set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
     set(PROFILE_FLAGS
         -Wl,--no-as-needed
         -lprofiler
-#        -ltcmalloc
         -fno-pie
+        -fno-omit-frame-pointer
         -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free)
 endif()
 

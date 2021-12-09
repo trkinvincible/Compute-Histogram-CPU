@@ -6,7 +6,6 @@
 
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
-
 #ifdef MEMORY_OPTIMIZED
 #include "../hdr/gzio.h"
 #endif
@@ -79,6 +78,8 @@ public:
 
         return true;
 #else
+        (void)file_name;
+        (void)data_size;
         auto start = input_file_stream.tellg();
         input_file_stream.seekg(0, std::ios_base::end);
         auto end = input_file_stream.tellg();
@@ -111,6 +112,10 @@ class RawEncoder : public IEncoder{
 public:
     bool Parse(std::ifstream& input_file_stream, const std::string& file_name,
                const std::size_t data_size, std::vector<std::string>& fill) const noexcept override{
+
+        (void)file_name;
+        (void)data_size;
+
         auto start = input_file_stream.tellg();
         input_file_stream.seekg(0, std::ios_base::end);
         auto end = input_file_stream.tellg();

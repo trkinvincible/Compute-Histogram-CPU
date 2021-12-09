@@ -156,7 +156,7 @@ public:
                     auto fu = std::async(std::launch::async, [min, max, this, data = std::move(tmp)]() mutable{
 
                         bins_type hist(m_Bins);
-                        for (int idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
+                        for (std::size_t idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
                             auto val = DecodeBytes(data, idx);
                             // TODO: caution!!.
                             // strictly validate for extents because hist[] is pre allocated based on bins.
@@ -223,7 +223,7 @@ PROFILE_START
                 auto other = second.get();
                 bins_type ret(m_Bins);
                 assert(first->size() == other->size());
-                for (int i = 0; i < ret->size(); ++i){
+                for (std::size_t i = 0; i < ret->size(); ++i){
                     ret[i] = first[i] + other[i];
                 }
                 first.canRelease(true);
@@ -244,7 +244,7 @@ PROFILE_STOP
         std::ofstream output(m_Config->data().output_file_name);
         const auto s = ret->size();
         m_Output.resize(s);
-        for (int i = 0; i < s; ++i){
+        for (std::size_t i = 0; i < s; ++i){
             const auto& c = ret[i];
             m_Output[i] = c;
             output << "(" << i << ", " << c << ")" << '\n';
