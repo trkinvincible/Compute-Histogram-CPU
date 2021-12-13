@@ -1,3 +1,5 @@
+
+
 #pragma once
 
 #include <string>
@@ -11,7 +13,7 @@
 
 namespace RkUtil {
 
-const int MAX_HIST_BIN_SIZE = 300;
+const int MAX_HIST_BIN_SIZE = 256;
 
 enum class PAYLOAD_TYPE {
     TypeUChar = 0,
@@ -19,8 +21,8 @@ enum class PAYLOAD_TYPE {
 };
 
 const std::size_t PAYLOAD_TYPE_SIZE[] = {
-  sizeof(char),
-  sizeof(short),
+    sizeof(char),
+    sizeof(short),
 };
 
 static std::map<std::string, PAYLOAD_TYPE> PayLoadType = {
@@ -66,12 +68,35 @@ std::size_t NearestPowerOfTwo(std::size_t v){
 
 // Lock-free is not wait free. with this container no need memory fence.
 // will yield better performance in GPU/Metal
-template<typename T>
+template<typename T, std::size_t N = MAX_HIST_BIN_SIZE>
 class AlignedContinuousMemory
 {
     static constexpr std::size_t  CACHELINE_SIZE{64};
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type data[N + 1];
 
 public:
+    AlignedContinuousMemory(std::size_t size = 0)
+        : m_Size(0),
+          m_Data(nullptr)
+    {
+        if constexpr (N <= MAX_HIST_BIN_SIZE){
+            m_Data = reinterpret_cast<T*>(&data);
+            m_Size = N;
+        }else{
+            if (size > 0){
+                try{
+                    const auto s = NearestPowerOfTwo(size);
+                    m_Data = static_cast<T*>(std::aligned_alloc(std::max(CACHELINE_SIZE, s), sizeof(T) * size));
+                    clear();
+                }catch(std::exception& ex){
+                    std::cerr << " histo bins memory allocation failed" << std::endl;
+                    throw;
+                }
+                m_Size = size;
+            }
+        }
+    }
+
     AlignedContinuousMemory(const AlignedContinuousMemory& other){
 
         AlignedContinuousMemory(other.m_Size);
@@ -79,13 +104,14 @@ public:
     }
 
     AlignedContinuousMemory(AlignedContinuousMemory&& other) noexcept{
+
         this->m_Data = std::exchange(other.m_Data, nullptr);
         this->m_Size = std::exchange(other.m_Size, 0);
     }
 
     AlignedContinuousMemory& operator=(AlignedContinuousMemory& other){
-        if (this != &other){
 
+        if (this != &other){
             // If exception occurs in mem alloc exit here keeping the "other" untouched.
             AlignedContinuousMemory m(other.m_Size);
 
@@ -118,40 +144,38 @@ public:
         return *this;
     }
 
-    AlignedContinuousMemory(std::size_t size = 0)
-        : m_Size(size),
-          m_Data(nullptr)
-    {
-        if (m_Size > 0){
-            try{
-                const auto s = NearestPowerOfTwo(m_Size);
-                m_Data = static_cast<T*>(std::aligned_alloc(std::max(CACHELINE_SIZE, s), sizeof(T) * size));
-                clear();
-            }catch(std::exception& ex){
-                std::cerr << " histo bins memory allocation failed" << std::endl;
-                throw;
-            }
-        }
-    }
-
     template<typename ...Args>
     void emplace_back(Args&&... args) {
-        new(&m_Data[m_Size]) T(std::forward<Args>(args)...);
-        ++m_Size;
+
+        if (m_CurrPos == m_Size - 1){
+            assert(false && "out of bound access");
+        }
+        new(&m_Data[m_CurrPos++]) T(std::forward<Args>(args)...);
     }
 
     T& operator[](std::size_t pos) {
-        return *reinterpret_cast<T*>(&m_Data[pos]);
+
+        if (pos <= m_Size){
+            return *reinterpret_cast<T*>(&m_Data[pos]);
+        }else{
+            assert(false && "out of bound access");
+        }
     }
 
     ~AlignedContinuousMemory() {
+
         for(std::size_t pos = 0; pos < m_Size; ++pos) {
             reinterpret_cast<T*>(&m_Data[pos])->~T();
         }
-        if (m_Data){
+        if (m_Data && !isInStack()){
             std::free(m_Data);
             m_Data = nullptr;
         }
+    }
+
+    inline bool isInStack(){
+
+        return (m_Size <= N);
     }
 
     std::size_t size() const {
@@ -168,6 +192,7 @@ public:
 
 private:
     std::size_t m_Size = 0;
+    std::size_t m_CurrPos = 0;
     T* m_Data;
 };
 
@@ -187,12 +212,12 @@ public:
         }
     }
 
-    AlignedContinuousMemory<T>* GetBuffer(){
+    AlignedContinuousMemory<T, N>* GetBuffer(){
 
         std::lock_guard<std::mutex> lk(m_Gurad);
 
         if (m_AvailableBuffers.empty()){
-            AlignedContinuousMemory<T>* m = new AlignedContinuousMemory<T>(N);
+            AlignedContinuousMemory<T, N>* m = new AlignedContinuousMemory<T, N>(N);
             m_AcquiredBuffers.insert(m);
             return m;
         }else{
@@ -205,7 +230,7 @@ public:
         }
     }
 
-    void ReleaseBuffer(AlignedContinuousMemory<T>* freeBuf){
+    void ReleaseBuffer(AlignedContinuousMemory<T, N>* freeBuf){
 
         std::lock_guard<std::mutex> lk(m_Gurad);
 
@@ -217,37 +242,36 @@ public:
 
 private:
     std::mutex m_Gurad;
-    std::unordered_set<AlignedContinuousMemory<T>*> m_AvailableBuffers;
-    std::unordered_set<AlignedContinuousMemory<T>*> m_AcquiredBuffers;
+    std::unordered_set<AlignedContinuousMemory<T, N>*> m_AvailableBuffers;
+    std::unordered_set<AlignedContinuousMemory<T, N>*> m_AcquiredBuffers;
 };
 
 // Class for memory recycling. RAII pattern
-template<typename T>
-struct ScopedBin{
+template<typename T, std::size_t N = MAX_HIST_BIN_SIZE>
+struct ScopedStaticVector{
 
 public:
-    ScopedBin(std::size_t size=0)
-        : m_Data(nullptr){
+    ScopedStaticVector(std::size_t size = 0)
+        : m_Data(nullptr),
+          m_Size(size){
 
-        if (size > 0){
-            m_Data = m_MemPool->getBinMemPool()->GetBuffer();
-        }
+        m_Data = m_MemPool->getBinMemPool()->GetBuffer();
     }
 
-    ~ScopedBin(){
+    ~ScopedStaticVector(){
 
         if (m_Data && m_CanRelease){
             m_MemPool->getBinMemPool()->ReleaseBuffer(m_Data);
         }
     }
 
-    ScopedBin(ScopedBin&& rhs) noexcept{
+    ScopedStaticVector(ScopedStaticVector&& rhs) noexcept{
 
         this->m_Data = std::exchange(rhs.m_Data, nullptr);
         this->m_CanRelease = std::exchange(rhs.m_CanRelease, true);
     }
 
-    ScopedBin& operator=(ScopedBin&& rhs){
+    ScopedStaticVector& operator=(ScopedStaticVector&& rhs){
 
         if (this != &rhs){
             if (m_Data){
@@ -261,20 +285,23 @@ public:
         return *this;
     }
 
-    void canRelease(bool b) { m_CanRelease = b; }
-    RkUtil::AlignedContinuousMemory<T>* operator->(){ return m_Data; }
-    T& operator[](std::size_t index){ return (*m_Data)[index]; }
+    void canRelease(const bool b) { m_CanRelease = b; }
+
+    RkUtil::AlignedContinuousMemory<T, N>* operator->(){ return m_Data; }
+
+    T& operator[](const std::size_t index){ return (*m_Data)[index]; }
 
 private:
     // Always armed to release the memory unless explicity set
     bool m_CanRelease = true;
-    RkUtil::AlignedContinuousMemory<T>* m_Data;
+    RkUtil::AlignedContinuousMemory<T, N>* m_Data;
+    std::size_t m_Size;
     // bin will have multiple singleton instances of mempool of different sizes. MAX_HIST_BIN_SIZE is TODO:
-    static std::shared_ptr<BinMemPool<T, MAX_HIST_BIN_SIZE>> m_MemPool;
+    static std::shared_ptr<BinMemPool<T, N>> m_MemPool;
 };
 
-template <typename T>
-std::shared_ptr<BinMemPool<T, MAX_HIST_BIN_SIZE>> ScopedBin<T>::m_MemPool = std::make_shared<BinMemPool<T, MAX_HIST_BIN_SIZE>>();
+template <typename T, std::size_t N>
+std::shared_ptr<BinMemPool<T, N>> ScopedStaticVector<T, N>::m_MemPool = std::make_shared<BinMemPool<T, N>>();
 
 template <typename RandomIt>
 int parallel_multiply(RandomIt beg, RandomIt end)
@@ -294,7 +321,7 @@ int parallel_multiply(RandomIt beg, RandomIt end)
 template<typename T>
 constexpr bool isValidNrrdEncodedType(){
     return std::is_integral_v<T> ||
-           std::is_floating_point_v<T>;
+            std::is_floating_point_v<T>;
 }
 
 template<typename T, typename = std::enable_if_t<isValidNrrdEncodedType<T>()>>

@@ -36,7 +36,7 @@
 class ComputeHistogram : public Task{
 
     // Must use some factory method to generate this varaible for type and size based on config
-    using bins_type = RkUtil::ScopedBin<std::uint32_t>;
+    using bins_type = RkUtil::ScopedStaticVector<std::uint32_t, 300>;
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)

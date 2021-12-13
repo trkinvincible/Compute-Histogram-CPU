@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(RUN_UNITTEST "Enable unit-tests" OFF)
-option(RUN_PROFILE "Enable profiling" ON)
+option(RUN_PROFILE "Enable profiling" OFF)
 
 if(RUN_PROFILE)
     message("profiling enabled")
