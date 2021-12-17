@@ -17,22 +17,6 @@
 #include "../hdr/Encoders.h"
 #include "../hdr/Utility.h"
 
-#ifdef  RUN_PROFILER
-#include <gperftools/profiler.h>
-#endif
-
-#ifdef RUN_PROFILER
-#define PROFILE_START ProfilerStart("./gpref_profile_data/cpu.prof" );
-#else
-#define PROFILE_START
-#endif
-
-#ifdef RUN_PROFILER
-#define PROFILE_STOP ProfilerStop();
-#else
-#define PROFILE_STOP
-#endif
-
 class ComputeHistogram : public Task{
 
     // Must use some factory method to generate this varaible for type and size based on config
@@ -207,7 +191,6 @@ public:
          * Maybe I will submit another solution in '*.cu' with only the kernel function later.
         */
 
-PROFILE_START
         bins_type ret;
         while(!m_Futures.empty()){
             auto& fu1 = m_Futures.front();
@@ -238,7 +221,6 @@ PROFILE_START
             merge_promise.set_value(fu2.get());
             m_Futures.pop_front();
         }
-PROFILE_STOP
 
         // Copy the output for unit test
         std::ofstream output(m_Config->data().output_file_name);

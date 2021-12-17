@@ -175,7 +175,7 @@ public:
 
     inline bool isInStack(){
 
-        return (m_Size <= N);
+        return (m_Size <= MAX_HIST_BIN_SIZE);
     }
 
     std::size_t size() const {
