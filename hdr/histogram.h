@@ -9,6 +9,8 @@
 #include <future>
 #include <string_view>
 #include <deque>
+#include <execution>
+#include <atomic>
 
 #include <boost/interprocess/file_mapping.hpp>
 
@@ -20,7 +22,8 @@
 class ComputeHistogram : public Task{
 
     // Must use some factory method to generate this varaible for type and size based on config
-    using bins_type = RkUtil::ScopedStaticVector<std::uint32_t, 300>;
+    using bins_output_type = std::uint32_t;
+    using bins_type = RkUtil::ScopedStaticVector<bins_output_type, RkUtil::MAX_HIST_BIN_SIZE>;
 
 public:
     explicit ComputeHistogram(const std::unique_ptr<RkConfig>& config)
@@ -137,10 +140,11 @@ public:
                     std::string_view tmp(start, individual_buffer_size);
                     const auto min = m_Config->data().min;
                     const auto max = m_Config->data().max;
-                    auto fu = std::async(std::launch::async, [min, max, this, data = std::move(tmp)]() mutable{
+                    const auto jump = RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type];
+                    auto fu = std::async(std::launch::async, [min, max, jump, this, data = tmp]() mutable{
 
                         bins_type hist(m_Bins);
-                        for (std::size_t idx = 0; idx < data.size(); idx += RkUtil::PAYLOAD_TYPE_SIZE[(int)m_Type]) {
+                        for (std::size_t idx = 0; idx < data.size(); idx += jump) {
                             auto val = DecodeBytes(data, idx);
                             // TODO: caution!!.
                             // strictly validate for extents because hist[] is pre allocated based on bins.
@@ -206,9 +210,13 @@ public:
                 auto other = second.get();
                 bins_type ret(m_Bins);
                 assert(first->size() == other->size());
-                for (std::size_t i = 0; i < ret->size(); ++i){
-                    ret[i] = first[i] + other[i];
-                }
+                const auto start = ret.begin();
+                std::for_each (std::execution::par_unseq, ret.begin(), ret.end(),
+                               [&ret, first, other, start](const bins_output_type& e)
+                {
+                    const auto index = &e - &start[0];
+                    ret[index] = first[index] + other[index];
+                });
                 first.canRelease(true);
                 other.canRelease(true);
 

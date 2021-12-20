@@ -13,7 +13,7 @@
 
 namespace RkUtil {
 
-const int MAX_HIST_BIN_SIZE = 256;
+const int MAX_HIST_BIN_SIZE = 300;
 
 enum class PAYLOAD_TYPE {
     TypeUChar = 0,
@@ -68,16 +68,18 @@ std::size_t NearestPowerOfTwo(std::size_t v){
 
 // Lock-free is not wait free. with this container no need memory fence.
 // will yield better performance in GPU/Metal
+// this is static vector == array so no one past iterator for end. write after defined size will be buffer overflow
 template<typename T, std::size_t N = MAX_HIST_BIN_SIZE>
 class AlignedContinuousMemory
 {
     static constexpr std::size_t  CACHELINE_SIZE{64};
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type data[N + 1];
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type data[N];
 
 public:
     AlignedContinuousMemory(std::size_t size = 0)
-        : m_Size(0),
-          m_Data(nullptr)
+        : m_Data(nullptr),
+          m_Size(0),
+          m_CurrPos(0)
     {
         if constexpr (N <= MAX_HIST_BIN_SIZE){
             m_Data = reinterpret_cast<T*>(&data);
@@ -147,7 +149,7 @@ public:
     template<typename ...Args>
     void emplace_back(Args&&... args) {
 
-        if (m_CurrPos == m_Size - 1){
+        if (m_CurrPos == m_Size + 1){
             assert(false && "out of bound access");
         }
         new(&m_Data[m_CurrPos++]) T(std::forward<Args>(args)...);
@@ -190,10 +192,13 @@ public:
         }
     }
 
+    T* start() { return m_Data; }
+    T* end() { return m_Data + m_Size; }
+
 private:
-    std::size_t m_Size = 0;
-    std::size_t m_CurrPos = 0;
     T* m_Data;
+    std::size_t m_Size;
+    std::size_t m_CurrPos;
 };
 
 template<typename T, std::size_t N>
@@ -250,6 +255,9 @@ private:
 template<typename T, std::size_t N = MAX_HIST_BIN_SIZE>
 struct ScopedStaticVector{
 
+    using value_type = RkUtil::AlignedContinuousMemory<T, N>;
+    using iterator = T*;
+
 public:
     ScopedStaticVector(std::size_t size = 0)
         : m_Data(nullptr),
@@ -264,6 +272,8 @@ public:
             m_MemPool->getBinMemPool()->ReleaseBuffer(m_Data);
         }
     }
+
+    ScopedStaticVector(const ScopedStaticVector& rhs)=default;
 
     ScopedStaticVector(ScopedStaticVector&& rhs) noexcept{
 
@@ -289,12 +299,16 @@ public:
 
     RkUtil::AlignedContinuousMemory<T, N>* operator->(){ return m_Data; }
 
-    T& operator[](const std::size_t index){ return (*m_Data)[index]; }
+    T& operator[](const std::size_t index) const { return (*m_Data)[index]; }
+
+    iterator begin() const{ return iterator(m_Data->start()); }
+
+    iterator end() const { return iterator(m_Data->end()); }
 
 private:
     // Always armed to release the memory unless explicity set
     bool m_CanRelease = true;
-    RkUtil::AlignedContinuousMemory<T, N>* m_Data;
+    value_type* m_Data;
     std::size_t m_Size;
     // bin will have multiple singleton instances of mempool of different sizes. MAX_HIST_BIN_SIZE is TODO:
     static std::shared_ptr<BinMemPool<T, N>> m_MemPool;

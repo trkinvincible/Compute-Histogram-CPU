@@ -79,6 +79,7 @@ endif()
 
 target_link_libraries(${PROJECT_NAME}
     -pthread
+    -ltbb
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
     ${PROFILE_FLAGS}
